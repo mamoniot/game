@@ -18,28 +18,10 @@ typedef struct Game {
 		MamStack* stack;
 		GameMemDesc stack_desc;
 	};
-	union {
-		int32* tilemap;
-		GameMemDesc tilemap_desc;
-	};
-	gbVec2 tilemap_size;// size, w, h must always match by convention
-	int32 tilemap_w;
-	int32 tilemap_h;
 
 	PCG rng;
 	double lifetime;
 	bool do_draw;
-
-	gbVec2 player_pos;
-	gbVec2 player_size;
-	float player_speed;//units per sec
-	float player_tele_displacement;//units
-	bool player_button_right;
-	double player_button_right_last_change;//timestamp
-	bool player_button_left;
-	double player_button_left_last_change;//timestamp
-	bool player_button_tele;
-	double player_button_tele_last_change;//timestamp
 } Game;
 
 typedef struct Output {

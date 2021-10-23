@@ -10,8 +10,6 @@
 #include "pcg.h"
 #define GB_MATH_IMPLEMENTATION
 #include "gb_math.h"
-// #define THREAD_IMPLEMENTATION
-// #include "thread.h"
 #include "basic.h"
 #include "SDL.h"
 #include "SDL_vulkan.h"
@@ -642,38 +640,6 @@ void game_new(GameMemDesc* game_mem_desc) {
 	pcg_seed(&game->rng, 12);
 	game->lifetime = 0.0;
 	game->do_draw = 1;
-
-
-	game->tilemap_w = 32;
-	game->tilemap_h = 32;
-	game->tilemap_size = gb_vec2(game->tilemap_w, game->tilemap_h);
-	game->tilemap = mam_stack_pusht(int32, game->stack, game->tilemap_w*game->tilemap_h);
-	game->tilemap_desc.alloc_size = 0;
-	game->tilemap_desc.children_size = 0;
-	game->tilemap_desc.flags = GAME_MEMDESC_INTERNAL;
-
-	//randomly generate initial tilemap
-	for_each_lt(y, game->tilemap_h) {
-		for_each_lt(x, game->tilemap_w) {
-			int tile_id = (pcg_random_uniform(&game->rng) < .3) + 1;
-			if(x == 0 || y == 0 || x == game->tilemap_w || y == game->tilemap_h) {
-				tile_id = 2;
-			}
-			game->tilemap[x + game->tilemap_w*y] = tile_id;
-		}
-	}
-
-
-	game->player_pos = gb_vec2(3, 3);
-	game->player_size = gb_vec2(.75, .5);
-	game->player_speed = 1;
-	game->player_tele_displacement = 2;
-	game->player_button_right = 0;
-	game->player_button_left = 0;
-	game->player_button_right_last_change = 0;
-	game->player_button_left_last_change = 0;
-	game->player_button_tele = 0;
-
 }
 
 Output game_update(Game* game, double delta) {
@@ -727,20 +693,8 @@ Output game_update(Game* game, double delta) {
 			}
 			if(!is_repeat) {
 				if(keycode == SDLK_LEFT) {
-					if(game->player_button_left != state) {
-						game->player_button_left = state;
-						game->player_button_left_last_change = game->lifetime;
-					}
 				} else if(keycode == SDLK_RIGHT) {
-					if(game->player_button_right != state) {
-						game->player_button_right = state;
-						game->player_button_right_last_change = game->lifetime;
-					}
 				} else if(keycode == SDLK_UP) {
-					if(game->player_button_tele != state) {
-						game->player_button_tele = state;
-						game->player_button_tele_last_change = game->lifetime;
-					}
 				} else if(keycode == SDLK_DOWN) {
 				} else if(keycode == SDLK_LSHIFT) {
 				} else if(keycode == SDLK_LCTRL) {
@@ -767,7 +721,6 @@ Output game_update(Game* game, double delta) {
 				game->do_draw = 1;
 			} else if (window_id == SDL_WINDOWEVENT_HIDDEN) {
 				game->do_draw = 0;
-				printf("hidden\n");
 			} else if (window_id == SDL_WINDOWEVENT_MINIMIZED) {
 				game->do_draw = 0;
 			} else if (window_id == SDL_WINDOWEVENT_MAXIMIZED) {
@@ -814,7 +767,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 	//transfer to vertex buffer
 	void* data;
 	vkMapMemory(mvk->device, staging_buffer_memory, 0, staging_buffer_mem_size, 0, &data);
-	memcpy(data, vertices, staging_buffer_mem_size);
+	memcpy(data, vertices, sizeof(Vertex)*vertices_size);
 	vkUnmapMemory(mvk->device, staging_buffer_memory);
 
 	copy_buffer(mvk, mvk->vertex_buffer, staging_buffer, staging_buffer_mem_size);
@@ -822,7 +775,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 
 	//transfer to index buffer
 	vkMapMemory(mvk->device, staging_buffer_memory, 0, staging_buffer_mem_size, 0, &data);
-	memcpy(data, vertex_indices, staging_buffer_mem_size);
+	memcpy(data, vertex_indices, sizeof(int32)*vertex_indices_size);
 	vkUnmapMemory(mvk->device, staging_buffer_memory);
 
 	copy_buffer(mvk, mvk->index_buffer, staging_buffer, staging_buffer_mem_size);
@@ -839,7 +792,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 
 	gb_mat4_rotate(&ubo.model, gb_vec3(0.0f, 0.0f, 1.0f), game->lifetime*degtorad(90.0f));
 	gb_mat4_look_at(&ubo.view, gb_vec3(2.0f, 2.0f, 2.0f), gb_vec3(0.0f, 0.0f, 0.0f), gb_vec3(0.0f, 0.0f, 1.0f));
-	gb_mat4_perspective(&ubo.proj, degtorad(45.0f), mvk->swap_chain_image_extent.width / (float) mvk->swap_chain_image_extent.height, 0.1f, 10.0f);
+	gb_mat4_perspective(&ubo.proj, degtorad(45.0f), mvk->swap_chain_image_extent.width/(float) mvk->swap_chain_image_extent.height, 0.1f, 10.0f);
 	ubo.proj.col[1].e[1] *= -1;
 
 	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, &data);
@@ -1191,14 +1144,6 @@ int main() {
 		find_device_capabilities(mvk, window);
 		create_swap_chain(mvk);
 		create_pipeline(mvk);
-
-		// int image_w, image_h, image_channels;
-		// stbi_uc* pixels = stbi_load("oofdab.png", &image_w, &image_h, &image_channels, STBI_rgb_alpha);
-		// VkDeviceSize image_size = image_w * image_h * 4;
-
-		// if (!pixels) {
-		// 	ERRORL("Failed to load texture image");
-		// }
 	}
 
 	int64 counts_per_frame = cast(int64, gb_floor(time_per_frame*SDL_GetPerformanceFrequency()));
