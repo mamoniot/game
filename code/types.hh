@@ -1,27 +1,41 @@
 
 
 const uint GAME_MEMDESC_TEMP = 0b1;//marks that an allocation does not need to be preserved on save/load
-const uint GAME_MEMDESC_INTERNAL = 0b10;//marks that an allocation is internal to its parent allocation and thus does not require separate memory management, alloc_size should be set to 0 if this flag is set
+const uint GAME_MEMDESC_INTERNAL = 0b10;//marks that an allocation is internal to its parent allocation and thus does not require separate memory management
 typedef struct GameMemDesc {
 	void* mem;
-	inta alloc_size;// size in bytes of the memory
-	int children_size;// number of child memory allocations
+	inta alloc_size;// size in bytes of the memory at mem
+	int children_total;// number of child GameMemDesc allocations at the beginning of the memory
 	uint flags;
 } GameMemDesc;
 
 typedef struct Game {
 	union {
-		MamStack* temp_stack;
-		GameMemDesc temp_stack_desc;
-	};
-	union {
 		MamStack* stack;
 		GameMemDesc stack_desc;
 	};
+	union {
+		MamStack* temp_stack;
+		GameMemDesc temp_stack_desc;
+	};
+
+	int32 grid_w;
+	int32 grid_h;
+	int32 grid[4*4];
 
 	PCG rng;
 	double lifetime;
 	bool do_draw;
+
+	bool input_left_down;
+	bool input_right_down;
+	bool input_up_down;
+	bool input_down_down;
+
+	bool input_left_just_down;
+	bool input_right_just_down;
+	bool input_up_just_down;
+	bool input_down_just_down;
 } Game;
 
 typedef struct Output {

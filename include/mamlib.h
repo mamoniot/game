@@ -340,8 +340,8 @@ MAMLIB__DECLR void mam__hextostr(char* buffer, mam_int* i, mam_int n) {
 MAMLIB__DECLR void mam_error_str(const char* file, int line, MamString msg);
 
 #if defined(MAMLIB_DEBUG) || defined(MAMLIB_FORCEASSERT)
-	#define MAM_ASSERT(b) ((b) ? 0 : (mam_error_str(__FILE__, __LINE__, mam_nullstr()), 0))
-	#define MAM_ASSERTL(b, msg) ((b) ? 0 : (mam_error_str(__FILE__, __LINE__, mam_consttostr(msg)), 0))
+	#define MAM_ASSERT(b) ((b) ? 0 : mam_error_str(__FILE__, __LINE__, mam_nullstr()))
+	#define MAM_ASSERTL(b, msg) ((b) ? 0 : mam_error_str(__FILE__, __LINE__, mam_consttostr(msg)))
 #else
 	#define MAM_ASSERT(b) 0
 	#define MAM_ASSERTL(b, msg) 0
@@ -469,7 +469,7 @@ void* mam_check_allocation(MamAllocatorFunc* allocator, void* allocator_data, Ma
 		return mam_check_on_alloc(allocator(mode, alloc_size + MAM_CHECK_FULL_SIZE, old_ptr, allocator_data), alloc_size);
 	} else if(mode == MAM_MODE_REALLOC) {
 		if(alloc_size) {
-			return mam_check_on_alloc(allocator(mode, alloc_size + MAM_CHECK_FULL_SIZE, old_ptr ? mam_check_on_free(old_ptr) : 0, allocator_data), alloc_size);
+			return mam_check_on_alloc(allocator(mode, alloc_size + MAM_CHECK_FULL_SIZE, mam_check_on_free(old_ptr), allocator_data), alloc_size);
 		} else {
 			return allocator(mode, alloc_size, mam_check_on_free(old_ptr), allocator_data);
 		}

@@ -51,19 +51,19 @@ void main_cleanup(MainTrash* data) {
 		MvkData* mvk = data->mvk;
 		if(mvk->device) vkDeviceWaitIdle(mvk->device);
 		if(mvk->image_available_sems) {
-			for_each_in(VkSemaphore*, sem, mvk->image_available_sems, MVK_FRAMES_IN_FLIGHT) vkDestroySemaphore(mvk->device, *sem, 0);
-			for_each_in(VkSemaphore*, sem, mvk->render_finished_sems, MVK_FRAMES_IN_FLIGHT) vkDestroySemaphore(mvk->device, *sem, 0);
-			for_each_in(VkFence*, fence, mvk->in_flight_fences, MVK_FRAMES_IN_FLIGHT) vkDestroyFence(mvk->device, *fence, 0);
+			for_each_in(VkSemaphore, sem, mvk->image_available_sems, MVK_FRAMES_IN_FLIGHT) vkDestroySemaphore(mvk->device, *sem, 0);
+			for_each_in(VkSemaphore, sem, mvk->render_finished_sems, MVK_FRAMES_IN_FLIGHT) vkDestroySemaphore(mvk->device, *sem, 0);
+			for_each_in(VkFence, fence, mvk->in_flight_fences, MVK_FRAMES_IN_FLIGHT) vkDestroyFence(mvk->device, *fence, 0);
 		}
 		if(mvk->command_pool) vkDestroyCommandPool(mvk->device, mvk->command_pool, 0);
 		if(mvk->frame_buffers) {
-			for_each_in(VkFramebuffer*, frame_buffer, mvk->frame_buffers, mvk->swap_chain_size) vkDestroyFramebuffer(mvk->device, *frame_buffer, 0);
+			for_each_in(VkFramebuffer, frame_buffer, mvk->frame_buffers, mvk->swap_chain_size) vkDestroyFramebuffer(mvk->device, *frame_buffer, 0);
 		}
 		if(mvk->pipeline) vkDestroyPipeline(mvk->device, mvk->pipeline, 0);
 		if(mvk->pipeline_layout) vkDestroyPipelineLayout(mvk->device, mvk->pipeline_layout, 0);
 		if(mvk->render_pass) vkDestroyRenderPass(mvk->device, mvk->render_pass, 0);
-		for_each_in(VkPipelineShaderStageCreateInfo*, shader_stage, mvk->shader_stages, mvk->shader_stages_size) vkDestroyShaderModule(mvk->device, shader_stage->module, 0);
-		for_each_in(VkImageView*, image_view, mvk->swap_chain_image_views, mvk->swap_chain_size) vkDestroyImageView(mvk->device, *image_view, 0);
+		for_each_in(VkPipelineShaderStageCreateInfo, shader_stage, mvk->shader_stages, mvk->shader_stages_size) vkDestroyShaderModule(mvk->device, shader_stage->module, 0);
+		for_each_in(VkImageView, image_view, mvk->swap_chain_image_views, mvk->swap_chain_size) vkDestroyImageView(mvk->device, *image_view, 0);
 		if(mvk->swap_chain) vkDestroySwapchainKHR(mvk->device, mvk->swap_chain, 0);
 		if(mvk->descriptor_set_layout) vkDestroyDescriptorSetLayout(mvk->device, mvk->descriptor_set_layout, 0);
 		if(mvk->vertex_buffer) vkDestroyBuffer(mvk->device, mvk->vertex_buffer, 0);
@@ -81,7 +81,7 @@ void main_cleanup(MainTrash* data) {
 	if(data->sdl_isinit) SDL_Quit();
 	#ifdef DEBUG
 	if(data->game_desc.mem) game_free_recursively(&data->game_desc);
-	for_each_in(void**, ptr, data->ptrs, TRASH_PTRS_SIZE) {
+	for_each_in(void*, ptr, data->ptrs, TRASH_PTRS_SIZE) {
 		if(*ptr) free(*ptr);
 	}
 	#endif
@@ -200,7 +200,7 @@ void find_device_capabilities(MvkData* mvk, SDL_Window* window) {
 	vkGetPhysicalDeviceSurfacePresentModesKHR(mvk->physical_device, mvk->surface, &present_modes_size, present_modes);
 
 	mvk->present_mode = VK_PRESENT_MODE_FIFO_KHR;//guaranteed to be available
-	for_each_in(VkPresentModeKHR*, mode, present_modes, present_modes_size) {
+	for_each_in(VkPresentModeKHR, mode, present_modes, present_modes_size) {
 		if(*mode == VK_PRESENT_MODE_MAILBOX_KHR) {
 			mvk->present_mode = *mode;
 			break;
@@ -220,7 +220,7 @@ void find_device_capabilities(MvkData* mvk, SDL_Window* window) {
 	vkGetPhysicalDeviceSurfaceFormatsKHR(mvk->physical_device, mvk->surface, &formats_size, formats);
 
 	mvk->surface_format = formats[0];
-	for_each_in(VkSurfaceFormatKHR*, format, formats, formats_size) {
+	for_each_in(VkSurfaceFormatKHR, format, formats, formats_size) {
 		if (format->format == VK_FORMAT_B8G8R8A8_SRGB && format->colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			mvk->surface_format = *format;
 			break;
@@ -311,7 +311,7 @@ void create_swap_chain(MvkData* mvk) {
 		}
 
 		VkDescriptorSetLayout* layouts = mam_stack_pusht(VkDescriptorSetLayout, mvk->stack, mvk->swap_chain_size);
-		for_each_in(VkDescriptorSetLayout*, layout, layouts, mvk->swap_chain_size) *layout = mvk->descriptor_set_layout;
+		for_each_in(VkDescriptorSetLayout, layout, layouts, mvk->swap_chain_size) *layout = mvk->descriptor_set_layout;
 
 		VkDescriptorSetAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -582,14 +582,14 @@ void create_pipeline(MvkData* mvk) {
 void recreate_swap_chain(MvkData* mvk, SDL_Window* window) {
 	vkDeviceWaitIdle(mvk->device);
 	{//clean up old swapchain
-		for_each_in(VkFramebuffer*, frame_buffer, mvk->frame_buffers, mvk->swap_chain_size) vkDestroyFramebuffer(mvk->device, *frame_buffer, 0);
+		for_each_in(VkFramebuffer, frame_buffer, mvk->frame_buffers, mvk->swap_chain_size) vkDestroyFramebuffer(mvk->device, *frame_buffer, 0);
 
 		vkFreeCommandBuffers(mvk->device, mvk->command_pool, mvk->swap_chain_size, mvk->command_buffers);
 
 		vkDestroyPipeline(mvk->device, mvk->pipeline, 0);
 		vkDestroyPipelineLayout(mvk->device, mvk->pipeline_layout, 0);
 		vkDestroyRenderPass(mvk->device, mvk->render_pass, 0);
-		for_each_in(VkImageView*, image_view, mvk->swap_chain_image_views, mvk->swap_chain_size) vkDestroyImageView(mvk->device, *image_view, 0);
+		for_each_in(VkImageView, image_view, mvk->swap_chain_image_views, mvk->swap_chain_size) vkDestroyImageView(mvk->device, *image_view, 0);
 		vkDestroySwapchainKHR(mvk->device, mvk->swap_chain, 0);
 
 		vkDestroyBuffer(mvk->device, mvk->uniform_buffer, 0);
@@ -607,7 +607,7 @@ void recreate_swap_chain(MvkData* mvk, SDL_Window* window) {
 
 
 void game_free_recursively(GameMemDesc* desc) {
-	for_each_lt(i, desc->children_size) {
+	for_each_lt(i, desc->children_total) {
 		GameMemDesc* child = &cast(GameMemDesc*, desc->mem)[i];
 
 		if(!(child->flags & GAME_MEMDESC_INTERNAL)) {
@@ -617,34 +617,59 @@ void game_free_recursively(GameMemDesc* desc) {
 	free(desc->mem);
 	desc->mem = 0;
 }
+//NOTE: all memory for the game's internals should be allocated through this function
+GameMemDesc alloc_game_mem(inta alloc_size, int children_total, uint flags) {
+	GameMemDesc desc;
+	desc.mem = malloc(alloc_size);
+	desc.alloc_size = alloc_size;
+	desc.children_total = children_total;
+	desc.flags = flags;
+	#ifdef DEBUG
+		memzro(desc.mem, alloc_size);
+	#endif
+	return desc;
+}
 
-void game_new(GameMemDesc* game_mem_desc) {
-	game_mem_desc->mem = malloc(GAME_STACK_SIZE);
-	game_mem_desc->alloc_size = GAME_STACK_SIZE;
-	game_mem_desc->children_size = 2;
-	game_mem_desc->flags = 0;
+GameMemDesc game_new() {
+	GameMemDesc game_mem_desc = alloc_game_mem(GAME_STACK_SIZE, 2, 0);
 
-	Game* game = cast(Game*, game_mem_desc->mem);
+	Game* game = (Game*)game_mem_desc.mem;
 
-	game->temp_stack = mam_stack_init(malloc(TEMP_STACK_SIZE), TEMP_STACK_SIZE);
-	game->temp_stack_desc.alloc_size = TEMP_STACK_SIZE;
-	game->temp_stack_desc.children_size = 0;
-	game->temp_stack_desc.flags = GAME_MEMDESC_TEMP;
-
-
-	game->stack = mam_stack_init(ptr_add(void, game_mem_desc->mem, sizeof(Game)), GAME_STACK_SIZE - sizeof(Game));
-	game->stack_desc.alloc_size = 0;
-	game->stack_desc.children_size = 0;
+	game->stack_desc.mem = ptr_add(void, game, sizeof(Game));
+	game->stack_desc.alloc_size = GAME_STACK_SIZE - sizeof(Game);
+	game->stack_desc.children_total = 0;
 	game->stack_desc.flags = GAME_MEMDESC_INTERNAL;
+	mam_stack_init(game->stack_desc.mem, game->stack_desc.alloc_size);
 
+	game->temp_stack_desc = alloc_game_mem(TEMP_STACK_SIZE, 0, GAME_MEMDESC_TEMP);
+	mam_stack_init(game->temp_stack_desc.mem, game->temp_stack_desc.alloc_size);
+
+	//TODO: find a better rng seed
 	pcg_seed(&game->rng, 12);
+
 	game->lifetime = 0.0;
 	game->do_draw = 1;
+
+	{//init game state
+		game->grid_w = 4;
+		game->grid_h = 4;
+		memzero(game->grid, game->grid_h*game->grid_w);
+		int32 v = pcg_random_in(&game->rng, 1, 2);
+		int32 x = pcg_random_in(&game->rng, 0, game->grid_w);
+		int32 y = pcg_random_in(&game->rng, 0, game->grid_h);
+		game->grid[x + game->grid_w*y] = v;
+	}
+
+	return game_mem_desc;
 }
 
 Output game_update(Game* game, double delta) {
 	Output output = {};
 
+	game->input_left_just_down = 0;
+	game->input_right_just_down = 0;
+	game->input_up_just_down = 0;
+	game->input_down_just_down = 0;
 
 	SDL_Event event;
 	while(SDL_PollEvent(&event)) {
@@ -662,10 +687,10 @@ Output game_update(Game* game, double delta) {
 		} else if(event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
 			auto scancode = event.key.keysym.scancode;
 			auto keycode = event.key.keysym.sym;
-			bool state = (event.key.state == SDL_PRESSED);
+			bool is_down = (event.key.state == SDL_PRESSED);
 			bool is_repeat = (event.key.repeat > 0);
 			//TODO: Support full suite of keys
-			if(state) {
+			if(is_down) {
 				if(keycode == SDLK_ESCAPE) {
 					output.game_quit = 1;
 					break;
@@ -693,9 +718,17 @@ Output game_update(Game* game, double delta) {
 			}
 			if(!is_repeat) {
 				if(keycode == SDLK_LEFT) {
+					game->input_left_just_down |= is_down & !game->input_left_down;
+					game->input_left_down = is_down;
 				} else if(keycode == SDLK_RIGHT) {
+					game->input_right_just_down |= is_down & !game->input_left_down;
+					game->input_right_down = is_down;
 				} else if(keycode == SDLK_UP) {
+					game->input_up_just_down |= is_down & !game->input_left_down;
+					game->input_up_down = is_down;
 				} else if(keycode == SDLK_DOWN) {
+					game->input_down_just_down |= is_down & !game->input_left_down;
+					game->input_down_down = is_down;
 				} else if(keycode == SDLK_LSHIFT) {
 				} else if(keycode == SDLK_LCTRL) {
 				} else if(keycode == SDLK_0) {
@@ -734,6 +767,10 @@ Output game_update(Game* game, double delta) {
 		}
 	}
 	if(output.game_quit) return output;
+
+	{//update game
+		// game
+	}
 
 
 	game->lifetime += delta;
@@ -866,9 +903,9 @@ int main() {
 
 			mvk_desired_layers = mam_stack_pusht(char*, mvk->stack, 0);
 			#ifdef DEBUG
-			for_each_in(char**, desired_debug_layer, MVK_DEBUG_LAYERS, MVK_DEBUG_LAYERS_SIZE) {
+			for_each_in(char*, desired_debug_layer, MVK_DEBUG_LAYERS, MVK_DEBUG_LAYERS_SIZE) {
 				int flag = 1;
-				for_each_in(VkLayerProperties*, layer, mvk_layers, mvk_layers_size) {
+				for_each_in(VkLayerProperties, layer, mvk_layers, mvk_layers_size) {
 					if(mam_streq(mam_tostr(*desired_debug_layer), mam_tostr(layer->layerName))) {
 						flag = 0;
 						mvk_desired_layers_size += 1;
@@ -916,7 +953,7 @@ int main() {
 			vkEnumeratePhysicalDevices(mvk->instance, &mvk_devices_size, mvk_devices);
 
 			int highest_rating = 0;
-			for_each_index(VkPhysicalDevice*, i, device, mvk_devices, mvk_devices_size) {
+			for_each_index(VkPhysicalDevice, i, device, mvk_devices, mvk_devices_size) {
 				inta mvk_stack_size = mvk->stack->size;
 
 				VkPhysicalDeviceProperties properties = {};
@@ -944,8 +981,8 @@ int main() {
 				// game can't function without geometry shaders
 				rating *= features.geometryShader != 0;
 				bool has_required_extensions = 0;
-				for_each_in(char**, desired_extension, MVK_DEVICE_EXTENSIONS, MVK_DEVICE_EXTENSIONS_SIZE) {
-					for_each_in(VkExtensionProperties*, extension, device_extensions, device_extensions_size) {
+				for_each_in(char*, desired_extension, MVK_DEVICE_EXTENSIONS, MVK_DEVICE_EXTENSIONS_SIZE) {
+					for_each_in(VkExtensionProperties, extension, device_extensions, device_extensions_size) {
 						if(mam_streq(mam_tostr(*desired_extension), mam_tostr(extension->extensionName))) {
 							has_required_extensions = 1;
 							break;
@@ -974,7 +1011,7 @@ int main() {
 				}
 
 
-				for_each_index_bw(VkQueueFamilyProperties*, j, queue, mvk_queues, mvk_queues_size) {
+				for_each_index_bw(VkQueueFamilyProperties, j, queue, mvk_queues, mvk_queues_size) {
 					VkBool32 can_present = 0;
 					vkGetPhysicalDeviceSurfaceSupportKHR(*device, j, mvk->surface, &can_present);
 					if(queue->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
@@ -1154,8 +1191,8 @@ int main() {
 	double lifetime = 0;
 	int64 dropped_frames = 0;
 
-	game_new(&trash.game_desc);
-	Game* game = cast(Game*, trash.game_desc.mem);
+	trash.game_desc = game_new();
+	Game* game = (Game*)trash.game_desc.mem;
 
 	while(1) {
 		//update game
