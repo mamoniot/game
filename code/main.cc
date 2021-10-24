@@ -564,7 +564,7 @@ void create_pipeline(MvkData* mvk) {
 
 			vkCmdBindPipeline(mvk->command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, mvk->pipeline);
 			VkDeviceSize offsets = 0;
-			int32 indices_size = 6;
+			int32 indices_size = INDEX_BUFFER_SIZE/sizeof(int32);
 
 			vkCmdBindDescriptorSets(mvk->command_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, mvk->pipeline_layout, 0, 1, &mvk->descriptor_sets[i], 0, 0);
 			vkCmdBindVertexBuffers(mvk->command_buffers[i], 0, 1, &mvk->vertex_buffer, &offsets);
@@ -820,56 +820,73 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 	create_buffer(mvk, ibuffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_ibuffer, &staging_ibuffer_memory);
 
 	//transfer to vertex buffer
-	void* vbuffer;
-	void* ibuffer;
-	void* ubuffer;
+	byte* vbuffer;
+	byte* ibuffer;
+	byte* ubuffer;
 	int32 vbuffer_i = 0;
 	int32 ibuffer_i = 0;
 	int32 ubuffer_i = 0;
-	vkMapMemory(mvk->device, staging_vbuffer_memory, 0, vbuffer_size, 0, &vbuffer);
-	vkMapMemory(mvk->device, staging_ibuffer_memory, 0, ibuffer_size, 0, &ibuffer);
-	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, &ubuffer);
+	vkMapMemory(mvk->device, staging_vbuffer_memory, 0, vbuffer_size, 0, (void**)&vbuffer);
+	vkMapMemory(mvk->device, staging_ibuffer_memory, 0, ibuffer_size, 0, (void**)&ibuffer);
+	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, (void**)&ubuffer);
 
 	{//fill gpu buffers
-		int32 screen_w = mvk->swap_chain_image_extent.width;
-		int32 screen_h = mvk->swap_chain_image_extent.height;
-		int32 pixel_l = min(screen_w, screen_h);
-
-		float screen_wf = screen_w;
-		float screen_hf = screen_h;
-		float pixel_lf = pixel_l;
-
-		int32 vertices_size = 4;
-		Vertex vertices[4] = {
-			{{0, 0}, {1.0f, 0.0f, 0.0f}},
-			{{pixel_lf, 0}, {0.0f, 1.0f, 0.0f}},
-			{{pixel_lf, pixel_lf}, {0.0f, 0.0f, 1.0f}},
-			{{0, pixel_lf}, {1.0f, 1.0f, 1.0f}}
+		static const gbVec3 colors[8] = {
+			{1.0f, 0.0f, 0.0f},
+			{1.0f, 1.0f, 0.0f},
+			{1.0f, 0.0f, 1.0f},
+			{1.0f, 1.0f, 1.0f},
+			{0.0f, 1.0f, 0.0f},
+			{0.0f, 1.0f, 1.0f},
+			{0.0f, 0.0f, 1.0f},
+			{0.0f, 0.0f, 0.0f},
 		};
 
-		int32 vertex_indices_size = 6;
-		int32 vertex_indices[6] = {
-			0, 1, 2, 2, 3, 0
-		};
+		float screen_w = mvk->swap_chain_image_extent.width;
+		float screen_h = mvk->swap_chain_image_extent.height;
+		float pixel_l = min(screen_w, screen_h);
 
-
-		memcpy(vbuffer, vertices, 4*sizeof(Vertex));
-		vbuffer_i += 4*sizeof(Vertex);
-		memcpy(ibuffer, vertex_indices, 6*sizeof(int32));
-		ibuffer_i += 6*sizeof(int32);
+		// int32 grid_x = 10;
+		// int32 grid_y = 10;
+		// int32 grid_w = pixel_l - 10;
+		// int32 grid_h = pixel_l - 10;
+		float square_base_l = gb_floor(pixel_l/4);
+		float square_l = square_base_l - 20;
+		for_each_lt(y, game->grid_h) {
+			for_each_lt(x, game->grid_w) {
+				int32 v = game->grid[x + game->grid_w*y];
+				float square_x = square_base_l*x + 10;
+				float square_y = square_base_l*y + 10;
+				gbVec3 color = colors[min(8, v)];
+				Vertex square[4] = {
+					{{square_x, square_y}, color},
+					{{square_x + square_l, square_y}, color},
+					{{square_x + square_l, square_y + square_l}, color},
+					{{square_x, square_y + square_l}, color}
+				};
+				int32 base_i = vbuffer_i/sizeof(Vertex);
+				int32 square_is[6] = {
+					base_i, base_i + 1, base_i + 2, base_i + 2, base_i + 3, base_i
+				};
+				memcpy(vbuffer + vbuffer_i, square, 4*sizeof(Vertex));
+				vbuffer_i += 4*sizeof(Vertex);
+				memcpy(ibuffer + ibuffer_i, square_is, 6*sizeof(int32));
+				ibuffer_i += 6*sizeof(int32);
+			}
+		}
 
 
 		UniformBufferObject ubo;
 		gb_mat4_identity(&ubo.model);
-		if(screen_wf >= screen_hf) {
-			ubo.model.w.x += (screen_wf - screen_hf)/2.0f;
+		if(screen_w >= screen_h) {
+			ubo.model.w.x += (screen_w - screen_h)/2.0f;
 		} else {
-			ubo.model.w.y += (screen_hf - screen_wf)/2.0f;
+			ubo.model.w.y += (screen_h - screen_w)/2.0f;
 		}
-		ubo.model.x.x *= 2.0f/screen_wf;
-		ubo.model.w.x *= 2.0f/screen_wf;
-		ubo.model.y.y *= 2.0f/screen_hf;
-		ubo.model.w.y *= 2.0f/screen_hf;
+		ubo.model.x.x *= 2.0f/screen_w;
+		ubo.model.w.x *= 2.0f/screen_w;
+		ubo.model.y.y *= 2.0f/screen_h;
+		ubo.model.w.y *= 2.0f/screen_h;
 		ubo.model.w.x += -1.0f;
 		ubo.model.w.y += -1.0f;
 
