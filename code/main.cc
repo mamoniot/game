@@ -577,6 +577,12 @@ void create_pipeline(MvkData* mvk) {
 			}
 		}
 	}
+
+	//Set up memory to track images in flight fences, we have to do this here since we need mvk->swap_chain_size amount of memory for it
+	mvk->images_in_flight_fences = mam_stack_pusht(VkFence, mvk->stack, mvk->swap_chain_size);
+	for_each_lt(i, mvk->swap_chain_size) {
+		mvk->images_in_flight_fences[i] = VK_NULL_HANDLE;
+	}
 }
 
 void recreate_swap_chain(MvkData* mvk, SDL_Window* window) {
@@ -1250,7 +1256,6 @@ int main() {
 			mvk->render_finished_sems = &sems[MVK_FRAMES_IN_FLIGHT];
 
 			mvk->in_flight_fences = mam_stack_pusht(VkFence, mvk->stack, MVK_FRAMES_IN_FLIGHT);
-			mvk->images_in_flight_fences = mam_stack_pusht(VkFence, mvk->stack, MVK_FRAMES_IN_FLIGHT);
 			VkFenceCreateInfo fence_info = {};
 			fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 			fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -1258,7 +1263,6 @@ int main() {
 				if(vkCreateFence(mvk->device, &fence_info, 0, &mvk->in_flight_fences[i]) != VK_SUCCESS) {
 					ERRORL("Failed to create a vulkan fence\n");
 				}
-				mvk->images_in_flight_fences[i] = VK_NULL_HANDLE;
 			}
 		}
 		{//create shaders
@@ -1373,18 +1377,16 @@ int main() {
 
 			// Check if a previous frame is using this image (i.e. there is its fence to wait on)
 			if(mvk->images_in_flight_fences[image_i] != VK_NULL_HANDLE) {
-				vkWaitForFences(mvk->device, 1, &mvk->images_in_flight_fences[image_i], VK_TRUE, UINT64_MAX);
+				vkWaitForFences(mvk->device, 1, &mvk->images_in_flight_fences[image_i], VK_TRUE, MAX_UINT64);
+				//TODO: there is a bug with the line above
 			}
 			// Mark the image as now being in use by this frame
 			mvk->images_in_flight_fences[image_i] = mvk->in_flight_fences[frame_i];
 
 			vkResetFences(mvk->device, 1, &mvk->in_flight_fences[frame_i]);
 
-
 			//render the frame
 			game_render(game, delta, mvk, image_i);
-
-
 
 
 			VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
