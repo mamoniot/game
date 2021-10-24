@@ -434,8 +434,8 @@ void create_pipeline(MvkData* mvk) {
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
-	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;//controls which side of the face of a triangle is rendered, aka which side is see through
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
 	rasterizer.depthBiasClamp = 0.0f; // Optional
@@ -625,7 +625,7 @@ GameMemDesc alloc_game_mem(inta alloc_size, int children_total, uint flags) {
 	desc.children_total = children_total;
 	desc.flags = flags;
 	#ifdef DEBUG
-		memzro(desc.mem, alloc_size);
+		memset(desc.mem, 'a', alloc_size);
 	#endif
 	return desc;
 }
@@ -653,6 +653,7 @@ GameMemDesc game_new() {
 	{//init game state
 		game->grid_w = 4;
 		game->grid_h = 4;
+		game->grid = mam_stack_pusht(int32, game->stack, game->grid_h*game->grid_w);
 		memzero(game->grid, game->grid_h*game->grid_w);
 		int32 v = pcg_random_in(&game->rng, 1, 2);
 		int32 x = pcg_random_in(&game->rng, 0, game->grid_w);
@@ -666,10 +667,14 @@ GameMemDesc game_new() {
 Output game_update(Game* game, double delta) {
 	Output output = {};
 
-	game->input_left_just_down = 0;
-	game->input_right_just_down = 0;
-	game->input_up_just_down = 0;
-	game->input_down_just_down = 0;
+
+	{//clear transient data
+		mam_stack_set_size(game->temp_stack, 0);
+		game->input_left_just_down = 0;
+		game->input_right_just_down = 0;
+		game->input_up_just_down = 0;
+		game->input_down_just_down = 0;
+	}
 
 	SDL_Event event;
 	while(SDL_PollEvent(&event)) {
@@ -769,6 +774,28 @@ Output game_update(Game* game, double delta) {
 	if(output.game_quit) return output;
 
 	{//update game
+		// if(game->input_left_just_down) {
+			// for_each_in_range(x, 1, game->grid_w - 1) {
+				// for_each_lt(y, game->grid_h) {
+					// int32 v = game->grid[x + game->grid_w*y];
+					// int32 coll_v = game->grid[x - 1 + game->grid_w*y];
+					// if(coll_v == 0) {
+
+					// } else if(coll_v == 0) {
+						//
+					// } else {
+						// int32 new_x = x - 1;
+						// game->grid[new_x + game->grid_w*y]
+					// }
+				// }
+			// }
+		// } else if(game->input_right_just_down) {
+
+		// } else if(game->input_up_just_down) {
+
+		// } else if(game->input_down_just_down) {
+
+		// }
 		// game
 	}
 
@@ -781,60 +808,84 @@ Output game_update(Game* game, double delta) {
 
 
 void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
-	int32 vertices_size = 4;
-	Vertex vertices[4] = {
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
-	};
 
-	int32 vertex_indices_size = 6;
-	int32 vertex_indices[6] = {
-		0, 1, 2, 2, 3, 0
-	};
+	int32 vbuffer_size = VERTEX_BUFFER_SIZE;
+	VkBuffer staging_vbuffer;
+	VkDeviceMemory staging_vbuffer_memory;
+	create_buffer(mvk, vbuffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_vbuffer, &staging_vbuffer_memory);
 
-	int32 staging_buffer_mem_size = max(sizeof(int32)*vertex_indices_size, sizeof(Vertex)*vertices_size);
-
-
-	VkBuffer staging_buffer;
-	VkDeviceMemory staging_buffer_memory;
-	create_buffer(mvk, staging_buffer_mem_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_buffer, &staging_buffer_memory);
+	int32 ibuffer_size = INDEX_BUFFER_SIZE;
+	VkBuffer staging_ibuffer;
+	VkDeviceMemory staging_ibuffer_memory;
+	create_buffer(mvk, ibuffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &staging_ibuffer, &staging_ibuffer_memory);
 
 	//transfer to vertex buffer
-	void* data;
-	vkMapMemory(mvk->device, staging_buffer_memory, 0, staging_buffer_mem_size, 0, &data);
-	memcpy(data, vertices, sizeof(Vertex)*vertices_size);
-	vkUnmapMemory(mvk->device, staging_buffer_memory);
+	void* vbuffer;
+	void* ibuffer;
+	void* ubuffer;
+	int32 vbuffer_i = 0;
+	int32 ibuffer_i = 0;
+	int32 ubuffer_i = 0;
+	vkMapMemory(mvk->device, staging_vbuffer_memory, 0, vbuffer_size, 0, &vbuffer);
+	vkMapMemory(mvk->device, staging_ibuffer_memory, 0, ibuffer_size, 0, &ibuffer);
+	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, &ubuffer);
 
-	copy_buffer(mvk, mvk->vertex_buffer, staging_buffer, staging_buffer_mem_size);
+	{//fill gpu buffers
+		int32 screen_w = mvk->swap_chain_image_extent.width;
+		int32 screen_h = mvk->swap_chain_image_extent.height;
+		int32 pixel_l = min(screen_w, screen_h);
+
+		float screen_wf = screen_w;
+		float screen_hf = screen_h;
+		float pixel_lf = pixel_l;
+
+		int32 vertices_size = 4;
+		Vertex vertices[4] = {
+			{{0, 0}, {1.0f, 0.0f, 0.0f}},
+			{{pixel_lf, 0}, {0.0f, 1.0f, 0.0f}},
+			{{pixel_lf, pixel_lf}, {0.0f, 0.0f, 1.0f}},
+			{{0, pixel_lf}, {1.0f, 1.0f, 1.0f}}
+		};
+
+		int32 vertex_indices_size = 6;
+		int32 vertex_indices[6] = {
+			0, 1, 2, 2, 3, 0
+		};
 
 
-	//transfer to index buffer
-	vkMapMemory(mvk->device, staging_buffer_memory, 0, staging_buffer_mem_size, 0, &data);
-	memcpy(data, vertex_indices, sizeof(int32)*vertex_indices_size);
-	vkUnmapMemory(mvk->device, staging_buffer_memory);
-
-	copy_buffer(mvk, mvk->index_buffer, staging_buffer, staging_buffer_mem_size);
+		memcpy(vbuffer, vertices, 4*sizeof(Vertex));
+		vbuffer_i += 4*sizeof(Vertex);
+		memcpy(ibuffer, vertex_indices, 6*sizeof(int32));
+		ibuffer_i += 6*sizeof(int32);
 
 
-	vkDestroyBuffer(mvk->device, staging_buffer, 0);
-	vkFreeMemory(mvk->device, staging_buffer_memory, 0);
+		UniformBufferObject ubo;
+		gb_mat4_identity(&ubo.model);
+		if(screen_wf >= screen_hf) {
+			ubo.model.w.x += (screen_wf - screen_hf)/2.0f;
+		} else {
+			ubo.model.w.y += (screen_hf - screen_wf)/2.0f;
+		}
+		ubo.model.x.x *= 2.0f/screen_wf;
+		ubo.model.w.x *= 2.0f/screen_wf;
+		ubo.model.y.y *= 2.0f/screen_hf;
+		ubo.model.w.y *= 2.0f/screen_hf;
+		ubo.model.w.x += -1.0f;
+		ubo.model.w.y += -1.0f;
 
+		memcpy(ubuffer, &ubo, sizeof(UniformBufferObject));
+		ubuffer_i += sizeof(UniformBufferObject);
+	}
 
-	UniformBufferObject ubo = {};
-	gb_mat4_identity(&ubo.model);
-	gb_mat4_identity(&ubo.view);
-	gb_mat4_identity(&ubo.proj);
-
-	gb_mat4_rotate(&ubo.model, gb_vec3(0.0f, 0.0f, 1.0f), game->lifetime*degtorad(90.0f));
-	gb_mat4_look_at(&ubo.view, gb_vec3(2.0f, 2.0f, 2.0f), gb_vec3(0.0f, 0.0f, 0.0f), gb_vec3(0.0f, 0.0f, 1.0f));
-	gb_mat4_perspective(&ubo.proj, degtorad(45.0f), mvk->swap_chain_image_extent.width/(float) mvk->swap_chain_image_extent.height, 0.1f, 10.0f);
-	ubo.proj.col[1].e[1] *= -1;
-
-	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, &data);
-	memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(mvk->device, staging_vbuffer_memory);
+	vkUnmapMemory(mvk->device, staging_ibuffer_memory);
 	vkUnmapMemory(mvk->device, mvk->uniform_buffer_memory);
+	copy_buffer(mvk, mvk->vertex_buffer, staging_vbuffer, vbuffer_i);
+	copy_buffer(mvk, mvk->index_buffer, staging_ibuffer, ibuffer_i);
+	vkDestroyBuffer(mvk->device, staging_vbuffer, 0);
+	vkDestroyBuffer(mvk->device, staging_ibuffer, 0);
+	vkFreeMemory(mvk->device, staging_vbuffer_memory, 0);
+	vkFreeMemory(mvk->device, staging_ibuffer_memory, 0);
 }
 
 

@@ -21,7 +21,7 @@ typedef struct Game {
 
 	int32 grid_w;
 	int32 grid_h;
-	int32 grid[4*4];
+	int32* grid;
 
 	PCG rng;
 	double lifetime;
