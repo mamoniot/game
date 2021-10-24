@@ -1,5 +1,5 @@
-glslc w:/code/shaders/shader.vert -o w:/env/shaders/vert.spv -O;
-glslc w:/code/shaders/shader.frag -o w:/env/shaders/frag.spv -O;
+glslc w:/code/shaders/shader.vert -o w:/env/vert.spv -O;
+glslc w:/code/shaders/shader.frag -o w:/env/frag.spv -O;
 
 pushd w:/dev &> $NULL
 mv w:/env/game.exe previous.exe &> $NULL

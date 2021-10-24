@@ -15,8 +15,8 @@
 #endif
 #define MVK_DEVICE_EXTENSIONS_SIZE 1
 static char* MVK_DEVICE_EXTENSIONS[MVK_DEVICE_EXTENSIONS_SIZE] = {"VK_KHR_swapchain"};
-#define MVK_SHADER_FRAG "shaders/frag.spv"
-#define MVK_SHADER_VERT "shaders/vert.spv"
+#define MVK_SHADER_FRAG "frag.spv"
+#define MVK_SHADER_VERT "vert.spv"
 #define MVK_FRAMES_IN_FLIGHT 2
 
 #define DEFAULT_SCREEN_WIDTH 1200
