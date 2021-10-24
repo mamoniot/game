@@ -2,8 +2,8 @@
 #ifdef DEBUG
 #define MAMLIB_DEBUG
 #endif
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+// #define STB_IMAGE_IMPLEMENTATION
+// #include "stb_image.h"
 #define MAMLIB_IMPLEMENTATION
 #include "mamlib.h"
 #define PCG_IMPLEMENTATION
