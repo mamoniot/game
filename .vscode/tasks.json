@@ -30,15 +30,16 @@
             ]
         },
         {
-            "label": "build release",
+            "label": "build release win64",
             "type": "shell",
             "command": "g++",
             "args": [
                 "-O3",
                 "${workspaceFolder}\\code\\main.cc",
-                "-o${workspaceFolder}\\env_win\\game.exe",
+                "-o${workspaceFolder}\\env_win64\\game.exe",
                 "-I${workspaceFolder}\\include",
                 "-L${workspaceFolder}\\lib",
+                "-Wl,-subsystem,windows",
                 "-lSDL2",
                 "-lSDL2main",
                 "-lvulkan-1",
