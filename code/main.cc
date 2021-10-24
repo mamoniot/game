@@ -634,6 +634,7 @@ GameMemDesc game_new() {
 	GameMemDesc game_mem_desc = alloc_game_mem(GAME_STACK_SIZE, 2, 0);
 
 	Game* game = (Game*)game_mem_desc.mem;
+	memzero(game, 1);
 
 	game->stack_desc.mem = ptr_add(void, game, sizeof(Game));
 	game->stack_desc.alloc_size = GAME_STACK_SIZE - sizeof(Game);
@@ -726,13 +727,13 @@ Output game_update(Game* game, double delta) {
 					game->input_left_just_down |= is_down & !game->input_left_down;
 					game->input_left_down = is_down;
 				} else if(keycode == SDLK_RIGHT) {
-					game->input_right_just_down |= is_down & !game->input_left_down;
+					game->input_right_just_down |= is_down & !game->input_right_down;
 					game->input_right_down = is_down;
 				} else if(keycode == SDLK_UP) {
-					game->input_up_just_down |= is_down & !game->input_left_down;
+					game->input_up_just_down |= is_down & !game->input_up_down;
 					game->input_up_down = is_down;
 				} else if(keycode == SDLK_DOWN) {
-					game->input_down_just_down |= is_down & !game->input_left_down;
+					game->input_down_just_down |= is_down & !game->input_down_down;
 					game->input_down_down = is_down;
 				} else if(keycode == SDLK_LSHIFT) {
 				} else if(keycode == SDLK_LCTRL) {
@@ -774,28 +775,116 @@ Output game_update(Game* game, double delta) {
 	if(output.game_quit) return output;
 
 	{//update game
-		// if(game->input_left_just_down) {
-			// for_each_in_range(x, 1, game->grid_w - 1) {
-				// for_each_lt(y, game->grid_h) {
-					// int32 v = game->grid[x + game->grid_w*y];
-					// int32 coll_v = game->grid[x - 1 + game->grid_w*y];
-					// if(coll_v == 0) {
-
-					// } else if(coll_v == 0) {
-						//
-					// } else {
-						// int32 new_x = x - 1;
-						// game->grid[new_x + game->grid_w*y]
-					// }
-				// }
-			// }
-		// } else if(game->input_right_just_down) {
-
-		// } else if(game->input_up_just_down) {
-
-		// } else if(game->input_down_just_down) {
-
-		// }
+		bool moved = 0;
+		if(game->input_left_just_down) {
+			for_each_in_range(x, 1, game->grid_w - 1) {
+				for_each_lt(y, game->grid_h) {
+					int32* v = &game->grid[x + game->grid_w*y];
+					if(*v == 0) continue;
+					for_each_in_range_bw(coll_x, 0, x - 1) {
+						int32* coll_v = &game->grid[coll_x + game->grid_w*y];
+						if(*coll_v == 0) {
+							*coll_v = *v;
+							*v = 0;
+							v = coll_v;
+							moved = 1;
+						} else if(*coll_v == *v) {
+							*coll_v += 1;
+							*v = 0;
+							moved = 1;
+							break;
+						} else {
+							break;
+						}
+					}
+				}
+			}
+		} else if(game->input_right_just_down) {
+			for_each_in_range_bw(x, 0, game->grid_w - 2) {
+				for_each_lt(y, game->grid_h) {
+					int32* v = &game->grid[x + game->grid_w*y];
+					if(*v == 0) continue;
+					for_each_in_range(coll_x, x + 1, game->grid_w - 1) {
+						int32* coll_v = &game->grid[coll_x + game->grid_w*y];
+						if(*coll_v == 0) {
+							*coll_v = *v;
+							*v = 0;
+							v = coll_v;
+							moved = 1;
+						} else if(*coll_v == *v) {
+							*coll_v += 1;
+							*v = 0;
+							moved = 1;
+							break;
+						} else {
+							break;
+						}
+					}
+				}
+			}
+		} else if(game->input_up_just_down) {
+			for_each_in_range(y, 0, game->grid_h - 1) {
+				for_each_lt(x, game->grid_w) {
+					int32* v = &game->grid[x + game->grid_w*y];
+					if(*v == 0) continue;
+					for_each_in_range_bw(coll_y, 0, y - 1) {
+						int32* coll_v = &game->grid[x + game->grid_w*coll_y];
+						if(*coll_v == 0) {
+							*coll_v = *v;
+							*v = 0;
+							v = coll_v;
+							moved = 1;
+						} else if(*coll_v == *v) {
+							*coll_v += 1;
+							*v = 0;
+							moved = 1;
+							break;
+						} else {
+							break;
+						}
+					}
+				}
+			}
+		} else if(game->input_down_just_down) {
+			for_each_in_range_bw(y, 0, game->grid_h - 2) {
+				for_each_lt(x, game->grid_w) {
+					int32* v = &game->grid[x + game->grid_w*y];
+					if(*v == 0) continue;
+					for_each_in_range(coll_y, y + 1, game->grid_h - 1) {
+						int32* coll_v = &game->grid[x + game->grid_w*coll_y];
+						if(*coll_v == 0) {
+							*coll_v = *v;
+							*v = 0;
+							v = coll_v;
+							moved = 1;
+						} else if(*coll_v == *v) {
+							*coll_v += 1;
+							*v = 0;
+							moved = 1;
+							break;
+						} else {
+							break;
+						}
+					}
+				}
+			}
+		}
+		if(moved) {
+			int32** empty_cells = mam_stack_pusht(int32*, game->temp_stack, game->grid_h*game->grid_w);
+			int32 empty_cells_size = 0;
+			for_each_lt(y, game->grid_h) {
+				for_each_lt(x, game->grid_w) {
+					int32* v = &game->grid[x + game->grid_w*y];
+					if(*v == 0) {
+						empty_cells[empty_cells_size] = v;
+						empty_cells_size += 1;
+					}
+				}
+			}
+			if(empty_cells_size > 0) {
+				*empty_cells[pcg_random_in(&game->rng, 0, empty_cells_size - 1)] = pcg_random_in(&game->rng, 1, 2);
+			}
+		}
 		// game
 	}
 
@@ -831,16 +920,22 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, (void**)&ubuffer);
 
 	{//fill gpu buffers
-		static const gbVec3 colors[8] = {
-			{1.0f, 0.0f, 0.0f},
-			{1.0f, 1.0f, 0.0f},
-			{1.0f, 0.0f, 1.0f},
+		static const int32 colors_size = 12;
+		gbVec3 colors[colors_size] = {
 			{1.0f, 1.0f, 1.0f},
-			{0.0f, 1.0f, 0.0f},
-			{0.0f, 1.0f, 1.0f},
-			{0.0f, 0.0f, 1.0f},
-			{0.0f, 0.0f, 0.0f},
 		};
+		for_each_in_range(i, 1, colors_size - 1) {
+			float t = (i - 1.0f)/(colors_size - 2.0f);
+			if(t <= .5) {
+				t *= 2;
+				colors[i].b = 1.0f - t;
+				colors[i].r = t;
+			} else {
+				t = 2*t - 1;
+				colors[i].r = 1.0f - t;
+				colors[i].g = t;
+			}
+		}
 
 		float screen_w = mvk->swap_chain_image_extent.width;
 		float screen_h = mvk->swap_chain_image_extent.height;
@@ -857,7 +952,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 				int32 v = game->grid[x + game->grid_w*y];
 				float square_x = square_base_l*x + 10;
 				float square_y = square_base_l*y + 10;
-				gbVec3 color = colors[min(8, v)];
+				gbVec3 color = colors[min(colors_size - 1, v)];
 				Vertex square[4] = {
 					{{square_x, square_y}, color},
 					{{square_x + square_l, square_y}, color},
