@@ -26,10 +26,10 @@
 static MamString read_file_to_stack(const char* filename, MamStack* stack) {
 	SDL_RWops* file = SDL_RWFromFile(filename, "r");
 	if(!file) {
+		const char* error = SDL_GetError();
 		char str[512] = {};
-		snprintf(str, 512, "Could not find critical file: %s\n", filename);
+		snprintf(str, 512, "Could not find critical file: %s; SDL Error: %s\n", filename, error);
 		MAM_ERRORL(str);
-		ERRORL(str);
 	}
 	int32 size = SDL_RWsize(file);
 	char* buffer = mam_stack_pusht(char, stack, size);
