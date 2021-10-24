@@ -22,8 +22,8 @@ typedef struct Game {
 	int32 grid_w;
 	int32 grid_h;
 	int32* grid;
-	// gbVec3 colors;
-	// int32 colors_size;
+	int32 colors_size;
+	gbVec3* colors;
 
 	PCG rng;
 	double lifetime;

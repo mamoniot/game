@@ -652,6 +652,24 @@ GameMemDesc game_new() {
 	game->do_draw = 1;
 
 	{//init game state
+		game->colors_size = 12;
+		game->colors = mam_stack_pusht(gbVec3, game->stack, game->colors_size);
+		game->colors[0] = {1.0f, 1.0f, 1.0f};
+		for_each_in_range(i, 1, game->colors_size - 1) {
+			float t = (i - 1.0f)/(game->colors_size - 2.0f);
+			if(t <= .5) {
+				t *= 2;
+				game->colors[i].r = t;
+				game->colors[i].g = 0.05;
+				game->colors[i].b = 1.0f - t;
+			} else {
+				t = 2*t - 1;
+				game->colors[i].r = 1.0f - t;
+				game->colors[i].g = t;
+				game->colors[i].b = 0.05;
+			}
+		}
+
 		game->grid_w = 4;
 		game->grid_h = 4;
 		game->grid = mam_stack_pusht(int32, game->stack, game->grid_h*game->grid_w);
@@ -667,7 +685,6 @@ GameMemDesc game_new() {
 
 Output game_update(Game* game, double delta) {
 	Output output = {};
-
 
 	{//clear transient data
 		mam_stack_set_size(game->temp_stack, 0);
@@ -920,31 +937,10 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, (void**)&ubuffer);
 
 	{//fill gpu buffers
-		static const int32 colors_size = 12;
-		gbVec3 colors[colors_size] = {
-			{1.0f, 1.0f, 1.0f},
-		};
-		for_each_in_range(i, 1, colors_size - 1) {
-			float t = (i - 1.0f)/(colors_size - 2.0f);
-			if(t <= .5) {
-				t *= 2;
-				colors[i].b = 1.0f - t;
-				colors[i].r = t;
-			} else {
-				t = 2*t - 1;
-				colors[i].r = 1.0f - t;
-				colors[i].g = t;
-			}
-		}
-
 		float screen_w = mvk->swap_chain_image_extent.width;
 		float screen_h = mvk->swap_chain_image_extent.height;
 		float pixel_l = min(screen_w, screen_h);
 
-		// int32 grid_x = 10;
-		// int32 grid_y = 10;
-		// int32 grid_w = pixel_l - 10;
-		// int32 grid_h = pixel_l - 10;
 		float square_base_l = gb_floor(pixel_l/4);
 		float square_l = square_base_l - 20;
 		for_each_lt(y, game->grid_h) {
@@ -952,7 +948,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 				int32 v = game->grid[x + game->grid_w*y];
 				float square_x = square_base_l*x + 10;
 				float square_y = square_base_l*y + 10;
-				gbVec3 color = colors[min(colors_size - 1, v)];
+				gbVec3 color = game->colors[min(game->colors_size - 1, v)];
 				Vertex square[4] = {
 					{{square_x, square_y}, color},
 					{{square_x + square_l, square_y}, color},
