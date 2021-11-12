@@ -1510,7 +1510,6 @@ int main() {
 			// Check if a previous frame is using this image (i.e. there is its fence to wait on)
 			if(mvk->images_in_flight_fences[image_i] != VK_NULL_HANDLE) {
 				vkWaitForFences(mvk->device, 1, &mvk->images_in_flight_fences[image_i], VK_TRUE, MAX_UINT64);
-				//TODO: there is a bug with the line above
 			}
 			// Mark the image as now being in use by this frame
 			mvk->images_in_flight_fences[image_i] = mvk->in_flight_fences[frame_i];
@@ -1544,7 +1543,7 @@ int main() {
 			present_info.pSwapchains = &mvk->swap_chain;
 			present_info.pImageIndices = &image_i;
 			present_info.pResults = 0; // Optional
-			result = vkQueuePresentKHR(mvk->present_queue, &present_info);
+			result = vkQueuePresentKHR(mvk->draw_queue, &present_info);
 			if(result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR && result != VK_SUCCESS) {
 				ERRORL("Failed to present a vulkan swap chain image");
 			}
