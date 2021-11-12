@@ -1531,7 +1531,8 @@ int main() {
 			submit_info.pCommandBuffers = &mvk->command_buffers[image_i];
 			submit_info.signalSemaphoreCount = 1;
 			submit_info.pSignalSemaphores = &mvk->render_finished_sems[frame_i];
-			if(vkQueueSubmit(mvk->draw_queue, 1, &submit_info, mvk->in_flight_fences[frame_i]) != VK_SUCCESS) {
+			auto temp = vkQueueSubmit(mvk->draw_queue, 1, &submit_info, mvk->in_flight_fences[frame_i]);
+			if(temp != VK_SUCCESS) {
 				ERRORL("Failed to submit to a vulkan queue\n");
 			}
 
