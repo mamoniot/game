@@ -9,6 +9,22 @@ typedef struct GameMemDesc {
 	uint flags;
 } GameMemDesc;
 
+
+typedef enum GameState {
+	GAME_STATE_2048,
+	GAME_STATE_GAME_OVER,
+} GameState;
+
+
+typedef enum AnimMove {
+	MOVE_NONE,
+	MOVE_UP,
+	MOVE_DOWN,
+	MOVE_LEFT,
+	MOVE_RIGHT,
+} AnimMove;
+
+
 typedef struct Game {
 	union {
 		MamStack* stack;
@@ -19,11 +35,22 @@ typedef struct Game {
 		GameMemDesc temp_stack_desc;
 	};
 
+	uint32 state;
+	float game_over_timer;
+
 	int32 grid_w;
 	int32 grid_h;
 	int32* grid;
 	int32 colors_size;
 	gbVec3* colors;
+
+	int32 anim_queue_max_size;//animation data
+	int32 anim_queue_start;
+	int32 anim_queue_end;
+	int32* anim_queue_moves;
+	int32* anim_queue_grids;
+	int32* anim_queue_grid_dist;
+	float anim_t;
 
 	PCG rng;
 	double lifetime;

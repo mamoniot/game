@@ -631,11 +631,18 @@ GameMemDesc alloc_game_mem(inta alloc_size, int children_total, uint flags) {
 	desc.children_total = children_total;
 	desc.flags = flags;
 	#ifdef DEBUG
-		memset(desc.mem, 'a', alloc_size);
+		memset(desc.mem, ~((char)0), alloc_size);
 	#endif
 	return desc;
 }
 
+void game_2048_init_grid(Game* game) {
+	memzero(game->grid, game->grid_h*game->grid_w);
+	int32 v = pcg_random_in(&game->rng, 1, 2);
+	int32 x = pcg_random_in(&game->rng, 0, game->grid_w - 1);
+	int32 y = pcg_random_in(&game->rng, 0, game->grid_h - 1);
+	game->grid[x + game->grid_w*y] = v;
+}
 GameMemDesc game_new() {
 	GameMemDesc game_mem_desc = alloc_game_mem(GAME_STACK_SIZE, 2, 0);
 
@@ -676,14 +683,20 @@ GameMemDesc game_new() {
 			}
 		}
 
+		game->state = GAME_STATE_2048;
+
 		game->grid_w = 4;
 		game->grid_h = 4;
 		game->grid = mam_stack_pusht(int32, game->stack, game->grid_h*game->grid_w);
-		memzero(game->grid, game->grid_h*game->grid_w);
-		int32 v = pcg_random_in(&game->rng, 1, 2);
-		int32 x = pcg_random_in(&game->rng, 0, game->grid_w);
-		int32 y = pcg_random_in(&game->rng, 0, game->grid_h);
-		game->grid[x + game->grid_w*y] = v;
+		game_2048_init_grid(game);
+
+		game->anim_queue_max_size = 4;
+		game->anim_queue_start = 0;
+		game->anim_queue_end = 0;
+		game->anim_queue_moves = mam_stack_pusht(int32, game->stack, game->anim_queue_max_size);
+		game->anim_queue_grids = mam_stack_pusht(int32, game->stack, game->anim_queue_max_size*game->grid_h*game->grid_w);
+		game->anim_queue_grid_dist = mam_stack_pusht(int32, game->stack, game->anim_queue_max_size*game->grid_h*game->grid_w);
+		game->anim_t = 0;
 	}
 
 	return game_mem_desc;
@@ -797,12 +810,23 @@ Output game_update(Game* game, double delta) {
 	}
 	if(output.game_quit) return output;
 
-	{//update game
-		bool moved = 0;
+	if(game->state == GAME_STATE_2048) {//update game
+		bool has_cell_moved = 0;
+		int32* grid_dist = 0;
+		if(game->input_down_just_down | game->input_up_just_down | game->input_left_just_down | game->input_right_just_down) {//will move
+			//submit movement data to the animation queue
+			game->anim_queue_moves[game->anim_queue_end] = MOVE_LEFT;
+			memcopy(&game->anim_queue_grids[game->anim_queue_end*game->grid_w*game->grid_h], &game->grid, game->grid_w*game->grid_h);
+			grid_dist = &game->anim_queue_grid_dist[game->anim_queue_end*game->grid_w*game->grid_h];
+			memzero(grid_dist, game->grid_w*game->grid_h);
+
+			game->anim_queue_end = (game->anim_queue_end + 1)%game->anim_queue_max_size;
+		}
 		if(game->input_left_just_down) {
 			for_each_in_range(x, 1, game->grid_w - 1) {
 				for_each_lt(y, game->grid_h) {
 					int32* v = &game->grid[x + game->grid_w*y];
+					int32* d = &grid_dist[x + game->grid_w*y];
 					if(*v == 0) continue;
 					for_each_in_range_bw(coll_x, 0, x - 1) {
 						int32* coll_v = &game->grid[coll_x + game->grid_w*y];
@@ -810,11 +834,13 @@ Output game_update(Game* game, double delta) {
 							*coll_v = *v;
 							*v = 0;
 							v = coll_v;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 						} else if(*coll_v == *v) {
 							*coll_v += 1;
 							*v = 0;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 							break;
 						} else {
 							break;
@@ -826,6 +852,7 @@ Output game_update(Game* game, double delta) {
 			for_each_in_range_bw(x, 0, game->grid_w - 2) {
 				for_each_lt(y, game->grid_h) {
 					int32* v = &game->grid[x + game->grid_w*y];
+					int32* d = &grid_dist[x + game->grid_w*y];
 					if(*v == 0) continue;
 					for_each_in_range(coll_x, x + 1, game->grid_w - 1) {
 						int32* coll_v = &game->grid[coll_x + game->grid_w*y];
@@ -833,11 +860,13 @@ Output game_update(Game* game, double delta) {
 							*coll_v = *v;
 							*v = 0;
 							v = coll_v;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 						} else if(*coll_v == *v) {
 							*coll_v += 1;
 							*v = 0;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 							break;
 						} else {
 							break;
@@ -849,6 +878,7 @@ Output game_update(Game* game, double delta) {
 			for_each_in_range(y, 0, game->grid_h - 1) {
 				for_each_lt(x, game->grid_w) {
 					int32* v = &game->grid[x + game->grid_w*y];
+					int32* d = &grid_dist[x + game->grid_w*y];
 					if(*v == 0) continue;
 					for_each_in_range_bw(coll_y, 0, y - 1) {
 						int32* coll_v = &game->grid[x + game->grid_w*coll_y];
@@ -856,11 +886,13 @@ Output game_update(Game* game, double delta) {
 							*coll_v = *v;
 							*v = 0;
 							v = coll_v;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 						} else if(*coll_v == *v) {
 							*coll_v += 1;
 							*v = 0;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 							break;
 						} else {
 							break;
@@ -872,6 +904,7 @@ Output game_update(Game* game, double delta) {
 			for_each_in_range_bw(y, 0, game->grid_h - 2) {
 				for_each_lt(x, game->grid_w) {
 					int32* v = &game->grid[x + game->grid_w*y];
+					int32* d = &grid_dist[x + game->grid_w*y];
 					if(*v == 0) continue;
 					for_each_in_range(coll_y, y + 1, game->grid_h - 1) {
 						int32* coll_v = &game->grid[x + game->grid_w*coll_y];
@@ -879,11 +912,13 @@ Output game_update(Game* game, double delta) {
 							*coll_v = *v;
 							*v = 0;
 							v = coll_v;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 						} else if(*coll_v == *v) {
 							*coll_v += 1;
 							*v = 0;
-							moved = 1;
+							has_cell_moved = 1;
+							*d += 1;
 							break;
 						} else {
 							break;
@@ -892,7 +927,7 @@ Output game_update(Game* game, double delta) {
 				}
 			}
 		}
-		if(moved) {
+		if(has_cell_moved) {
 			int32** empty_cells = mam_stack_pusht(int32*, game->temp_stack, game->grid_h*game->grid_w);
 			int32 empty_cells_size = 0;
 			for_each_lt(y, game->grid_h) {
@@ -907,8 +942,43 @@ Output game_update(Game* game, double delta) {
 			if(empty_cells_size > 0) {
 				*empty_cells[pcg_random_in(&game->rng, 0, empty_cells_size - 1)] = pcg_random_in(&game->rng, 1, 2);
 			}
+			if(empty_cells_size <= 1) {
+				bool has_a_move_left = 0;
+				for_each_lt(y, game->grid_h) {
+					for_each_lt(x, game->grid_w) {
+						int32 v = game->grid[x + game->grid_w*y];
+						if(y + 1 < game->grid_h) {
+							int32 u = game->grid[x + game->grid_w*(y + 1)];
+							if(v == u) {
+								has_a_move_left = 1;
+								break;
+							}
+						}
+						if(x + 1 < game->grid_w) {
+							int32 u = game->grid[(x + 1) + game->grid_w*y];
+							if(v == u) {
+								has_a_move_left = 1;
+								break;
+							}
+						}
+					}
+					if(has_a_move_left) break;
+				}
+				if(!has_a_move_left) {
+					game->state = GAME_STATE_GAME_OVER;
+					game->game_over_timer = 0;
+				}
+			}
 		}
-		// game
+	} else if(game->state == GAME_STATE_GAME_OVER) {
+		if(game->game_over_timer >= 1.5) {
+			if(game->input_down_just_down | game->input_up_just_down | game->input_left_just_down | game->input_right_just_down) {
+				game->state = GAME_STATE_2048;
+				game_2048_init_grid(game);
+			}
+		} else {
+			game->game_over_timer += delta;
+		}
 	}
 
 
@@ -947,28 +1017,85 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 		float screen_h = mvk->swap_chain_image_extent.height;
 		float pixel_l = min(screen_w, screen_h);
 
+
+		// int32* render_grid = 0;
+		// int32* render_grid_dist = 0;
+		int32 anim_move = MOVE_NONE;
+		// float anim_t = 0;
+		// int32 anim_queue_size = (game->anim_queue_end - game->anim_queue_start + game->anim_queue_max_size)%game->anim_queue_max_size;
+		// if(anim_queue_size > 0) {
+		// 	game->anim_t += delta/1.5;
+		// 	while(game->anim_t >= 1.0) {
+		// 		game->anim_t -= 1.0;
+		// 		game->anim_queue_start = (game->anim_queue_start + 1)%game->anim_queue_max_size;
+		// 		anim_queue_size = (game->anim_queue_end - game->anim_queue_start + game->anim_queue_max_size)%game->anim_queue_max_size;
+		// 		if(anim_queue_size == 0) {
+		// 			game->anim_t = 0;
+		// 			break;
+		// 		}
+		// 	}
+		// 	if(anim_queue_size > 0) {
+		// 		render_grid = &game->anim_queue_grids[game->anim_queue_start*game->grid_w*game->grid_h];
+		// 		render_grid_dist = &game->anim_queue_grid_dist[game->anim_queue_start*game->grid_w*game->grid_h];
+		// 		anim_move = game->anim_queue_moves[game->anim_queue_start];
+		// 		anim_t = game->anim_t;
+		// 	}
+		// }
+
 		float square_base_l = gb_floor(pixel_l/4);
 		float square_l = square_base_l - 20;
-		for_each_lt(y, game->grid_h) {
-			for_each_lt(x, game->grid_w) {
-				int32 v = game->grid[x + game->grid_w*y];
-				float square_x = square_base_l*x + 10;
-				float square_y = square_base_l*y + 10;
-				gbVec3 color = game->colors[min(game->colors_size - 1, v)];
-				Vertex square[4] = {
-					{{square_x, square_y}, color},
-					{{square_x + square_l, square_y}, color},
-					{{square_x + square_l, square_y + square_l}, color},
-					{{square_x, square_y + square_l}, color}
-				};
-				int32 base_i = vbuffer_i/sizeof(Vertex);
-				int32 square_is[6] = {
-					base_i, base_i + 1, base_i + 2, base_i + 2, base_i + 3, base_i
-				};
-				memcpy(vbuffer + vbuffer_i, square, 4*sizeof(Vertex));
-				vbuffer_i += 4*sizeof(Vertex);
-				memcpy(ibuffer + ibuffer_i, square_is, 6*sizeof(int32));
-				ibuffer_i += 6*sizeof(int32);
+		if(anim_move == MOVE_UP) {
+
+		} else if(anim_move == MOVE_DOWN) {
+
+		} else if(anim_move == MOVE_LEFT) {
+
+		} else if(anim_move == MOVE_RIGHT) {
+			// for_each_lt(y, game->grid_h) {
+				// for_each_lt(x, game->grid_w) {
+					// int32 v = render_grid[x + game->grid_w*y];
+					// int32 d = render_grid_dist[x + game->grid_w*y];
+					// float square_x = square_base_l*(x - d*anim_t) + 10;
+					// float square_y = square_base_l*y + 10;
+					// gbVec3 color = game->colors[min(game->colors_size - 1, v)];
+					// Vertex square[4] = {
+						// {{square_x, square_y}, color},
+						// {{square_x + square_l, square_y}, color},
+						// {{square_x + square_l, square_y + square_l}, color},
+						// {{square_x, square_y + square_l}, color}
+					// };
+					// int32 base_i = vbuffer_i/sizeof(Vertex);
+					// int32 square_is[6] = {
+						// base_i, base_i + 1, base_i + 2, base_i + 2, base_i + 3, base_i
+					// };
+					// memcpy(vbuffer + vbuffer_i, square, 4*sizeof(Vertex));
+					// vbuffer_i += 4*sizeof(Vertex);
+					// memcpy(ibuffer + ibuffer_i, square_is, 6*sizeof(int32));
+					// ibuffer_i += 6*sizeof(int32);
+				// }
+			// }
+		} else {
+			for_each_lt(y, game->grid_h) {
+				for_each_lt(x, game->grid_w) {
+					int32 v = game->grid[x + game->grid_w*y];
+					float square_x = square_base_l*x + 10;
+					float square_y = square_base_l*y + 10;
+					gbVec3 color = game->colors[min(game->colors_size - 1, v)];
+					Vertex square[4] = {
+						{{square_x, square_y}, color},
+						{{square_x + square_l, square_y}, color},
+						{{square_x + square_l, square_y + square_l}, color},
+						{{square_x, square_y + square_l}, color}
+					};
+					int32 base_i = vbuffer_i/sizeof(Vertex);
+					int32 square_is[6] = {
+						base_i, base_i + 1, base_i + 2, base_i + 2, base_i + 3, base_i
+					};
+					memcpy(vbuffer + vbuffer_i, square, 4*sizeof(Vertex));
+					vbuffer_i += 4*sizeof(Vertex);
+					memcpy(ibuffer + ibuffer_i, square_is, 6*sizeof(int32));
+					ibuffer_i += 6*sizeof(int32);
+				}
 			}
 		}
 
@@ -1138,25 +1265,30 @@ int main() {
 
 				int rating = 1;
 				// discrete GPUs have a significant performance advantage
-				if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+				if(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 					rating += 1024;
 				}
 				// maximum possible size of textures affects graphics quality
 				rating += properties.limits.maxImageDimension2D;
 				// game can't function without geometry shaders
 				rating *= features.geometryShader != 0;
-				bool has_required_extensions = 0;
+				bool has_required_extensions = 1;
 				for_each_in(char*, desired_extension, MVK_DEVICE_EXTENSIONS, MVK_DEVICE_EXTENSIONS_SIZE) {
+					bool has_cur_extension = 0;
 					for_each_in(VkExtensionProperties, extension, device_extensions, device_extensions_size) {
 						if(mam_streq(mam_tostr(*desired_extension), mam_tostr(extension->extensionName))) {
-							has_required_extensions = 1;
+							has_cur_extension = 1;
 							break;
 						}
+					}
+					if(!has_cur_extension) {
+						has_required_extensions = 0;
+						break;
 					}
 				}
 				// check for extensions
 				rating *= has_required_extensions;
-				if(!rating) {
+				if(rating <= 0) {
 					mam_stack_set_size(mvk->stack, mvk_stack_size);
 					continue;
 				}
@@ -1170,7 +1302,7 @@ int main() {
 				uint32 present_modes_size = 0;
 				vkGetPhysicalDeviceSurfacePresentModesKHR(*device, mvk->surface, &present_modes_size, 0);
 				rating *= present_modes_size > 0 && formats_size > 0;
-				if(!rating) {
+				if(rating <= 0) {
 					mam_stack_set_size(mvk->stack, mvk_stack_size);
 					continue;
 				}
@@ -1192,7 +1324,7 @@ int main() {
 					}
 				}
 				// device must support drawing and presenting
-				rating *= best_draw_queue_i >= 0 && best_present_queue_i >= 0;
+				rating *= best_draw_queue_i >= 0 & best_present_queue_i >= 0;
 				if(!rating) {
 					mam_stack_set_size(mvk->stack, mvk_stack_size);
 					continue;
@@ -1268,21 +1400,21 @@ int main() {
 		{//create shaders
 			VkShaderModule shader_frag = {};
 			VkShaderModule shader_vert = {};
-			VkShaderModuleCreateInfo shader_info = {};
+			VkShaderModuleCreateInfo shader_frag_mod_info = {};
+			VkShaderModuleCreateInfo shader_vert_mod_info = {};
 
 			MamString frag_code = read_file_to_stack(MVK_SHADER_FRAG, mvk->stack);
-			shader_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			shader_info.codeSize = frag_code.size;
-			shader_info.pCode = (uint32*)frag_code.ptr;
-			if(vkCreateShaderModule(mvk->device, &shader_info, 0, &shader_frag) != VK_SUCCESS) {
+			shader_frag_mod_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			shader_frag_mod_info.codeSize = frag_code.size;
+			shader_frag_mod_info.pCode = (uint32*)frag_code.ptr;
+			if(vkCreateShaderModule(mvk->device, &shader_frag_mod_info, 0, &shader_frag) != VK_SUCCESS) {
 				MAM_ERRORL("Failed to create the vulkan fragment shader\n");
 			}
 			MamString vert_code = read_file_to_stack(MVK_SHADER_VERT, mvk->stack);
-			memzero(&shader_info, 1);
-			shader_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			shader_info.codeSize = vert_code.size;
-			shader_info.pCode = (uint32*)vert_code.ptr;
-			if(vkCreateShaderModule(mvk->device, &shader_info, 0, &shader_vert) != VK_SUCCESS) {
+			shader_vert_mod_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			shader_vert_mod_info.codeSize = vert_code.size;
+			shader_vert_mod_info.pCode = (uint32*)vert_code.ptr;
+			if(vkCreateShaderModule(mvk->device, &shader_vert_mod_info, 0, &shader_vert) != VK_SUCCESS) {
 				MAM_ERRORL("Failed to create the vulkan fragment shader\n");
 			}
 
