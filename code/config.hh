@@ -6,7 +6,7 @@
 #define MVK_ENGINE_NAME "No Engine"
 
 
-#ifdef DEBUG
+#ifdef DEBUG__
 	#define MVK_DEBUG_LAYERS_SIZE 1
 	static char* MVK_DEBUG_LAYERS[MVK_DEBUG_LAYERS_SIZE] = {"VK_LAYER_KHRONOS_validation"};
 #else
