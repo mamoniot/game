@@ -92,6 +92,11 @@ void main_trap(void* data) {
 	//TODO: improve graceful exit of program
 	mam_system_error_trap(0);
 }
+VKAPI_ATTR VkBool32 VKAPI_CALL mvk_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType,VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
+	printf("validation layer: %s\n", pCallbackData->pMessage);
+
+	return VK_FALSE;
+}
 
 
 void create_buffer(MvkData* mvk, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* buffer_memory) {
@@ -1012,6 +1017,7 @@ void game_render(Game* game, double delta, MvkData* mvk, uint32 image_i) {
 	vkMapMemory(mvk->device, staging_ibuffer_memory, 0, ibuffer_size, 0, (void**)&ibuffer);
 	vkMapMemory(mvk->device, mvk->uniform_buffer_memory, image_i*sizeof(UniformBufferObject), sizeof(UniformBufferObject), 0, (void**)&ubuffer);
 
+
 	{//fill gpu buffers
 		float screen_w = mvk->swap_chain_image_extent.width;
 		float screen_h = mvk->swap_chain_image_extent.height;
@@ -1236,6 +1242,24 @@ int main() {
 			if(SDL_Vulkan_CreateSurface(window, mvk->instance, &mvk->surface) != SDL_TRUE) {
 				MAM_ERRORL("Failed to create a vulkan surface\n");
 			}
+		}
+		{
+			// #ifdef MVK_DEBUG_VALIDATION_ENABLED
+			VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
+			createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			createInfo.pfnUserCallback = mvk_debug_callback;
+
+			VkResult result = VK_ERROR_EXTENSION_NOT_PRESENT;
+			auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(mvk->instance, "vkCreateDebugUtilsMessengerEXT");
+			if(func) {
+				result = func(mvk->instance, &createInfo, 0, );
+			}
+			if (result != VK_SUCCESS) {
+				MAM_ERRORL("Failed to set up debug messenger\n");
+			}//TODO: fix
+			// #endif
 		}
 		{//pick physical device
 			mvk->physical_device = VK_NULL_HANDLE;
@@ -1532,7 +1556,7 @@ int main() {
 			submit_info.pSignalSemaphores = &mvk->render_finished_sems[frame_i];
 			auto temp = vkQueueSubmit(mvk->draw_queue, 1, &submit_info, mvk->in_flight_fences[frame_i]);
 			if(temp != VK_SUCCESS) {
-				ERRORL("Failed to submit to a vulkan queue\n");
+				ERRORL("Failed to submit to a vulkan draw command buffer\n");
 			}
 
 			VkPresentInfoKHR present_info = {};
@@ -1543,7 +1567,7 @@ int main() {
 			present_info.pSwapchains = &mvk->swap_chain;
 			present_info.pImageIndices = &image_i;
 			present_info.pResults = 0; // Optional
-			result = vkQueuePresentKHR(mvk->draw_queue, &present_info);
+			result = vkQueuePresentKHR(mvk->present_queue, &present_info);
 			if(result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR && result != VK_SUCCESS) {
 				ERRORL("Failed to present a vulkan swap chain image");
 			}
